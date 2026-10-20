@@ -12,7 +12,6 @@ import PublicLayout from './layouts/PublicLayout';
 import Home from './pages/public/Home';
 import ProfessorDashboard from './pages/professor/ProfessorDashboard';
 import StudentDashboard from './pages/student/StudentDashboard';
-import ComingSoon from './pages/ComingSoon';
 import PeopleList from './pages/admin/PeopleList';
 import PublicationsList from './pages/admin/PublicationsList';
 import DocumentCenter from './pages/admin/DocumentCenter';
@@ -21,6 +20,7 @@ import SystemSettings from './pages/admin/SystemSettings';
 import ProfileSettings from './pages/ProfileSettings';
 import OpportunitiesList from './pages/admin/OpportunitiesList';
 import StudentApplications from './pages/student/StudentApplications';
+import ProtectedRoute from './components/ProtectedRoute';
 
 function App() {
   return (
@@ -33,8 +33,12 @@ function App() {
         
         <Route path="/login" element={<Login />} />
         
-        {/* Admin Portal Routes */}
-        <Route path="/admin" element={<DashboardLayout />}>
+        {/* Admin & Reviewer Portal Routes */}
+        <Route path="/admin" element={
+          <ProtectedRoute allowedRoles={['Super Admin', 'Office Admin', 'Reviewer', 'Finance Officer']}>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
           <Route index element={<AdminDashboard />} />
           <Route path="research" element={<AdminProjects />} />
           <Route path="research/new" element={<ProjectForm />} />
@@ -52,10 +56,15 @@ function App() {
           <Route path="documents" element={<DocumentCenter />} />
           <Route path="approvals" element={<ApprovalsList />} />
           <Route path="system" element={<SystemSettings />} />
+          <Route path="settings" element={<ProfileSettings />} />
         </Route>
         
-        {/* Professor Portal Routes */}
-        <Route path="/professor" element={<DashboardLayout />}>
+        {/* Professor / Faculty Portal Routes */}
+        <Route path="/professor" element={
+          <ProtectedRoute allowedRoles={['Professor', 'Super Admin', 'Office Admin']}>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
           <Route index element={<ProfessorDashboard />} />
           <Route path="projects" element={<AdminProjects />} />
           <Route path="projects/new" element={<ProjectForm />} />
@@ -65,7 +74,11 @@ function App() {
         </Route>
 
         {/* Student Portal Routes */}
-        <Route path="/student" element={<DashboardLayout />}>
+        <Route path="/student" element={
+          <ProtectedRoute allowedRoles={['Student', 'Super Admin', 'Office Admin']}>
+            <DashboardLayout />
+          </ProtectedRoute>
+        }>
           <Route index element={<StudentDashboard />} />
           <Route path="opportunities" element={<OpportunitiesList />} />
           <Route path="applications" element={<StudentApplications />} />
@@ -73,6 +86,8 @@ function App() {
         </Route>
         
         <Route path="/dashboard" element={<Navigate to="/admin" replace />} />
+        {/* Catch-all fallback */}
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Router>
   );

@@ -14,7 +14,8 @@ import {
     LogOut,
     Menu,
     X,
-    Bell
+    Bell,
+    Shield
 } from 'lucide-react';
 
 const DashboardLayout = () => {
@@ -23,21 +24,38 @@ const DashboardLayout = () => {
 
     const userString = localStorage.getItem('user');
     const user = userString ? JSON.parse(userString) : null;
-    const role = user?.role || 'Student';
+    const role = user?.role || (user?.roles && user?.roles[0]) || 'Student';
 
     const getMenuItems = () => {
         if (role === 'Super Admin' || role === 'Office Admin') {
             return [
                 { name: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
                 { name: 'Research', icon: FlaskConical, path: '/admin/research' },
-                { name: 'People', icon: Users, path: '/admin/people' },
+                { name: 'Approvals Queue', icon: CheckSquare, path: '/admin/approvals' },
+                { name: 'People & Roles', icon: Users, path: '/admin/people' },
                 { name: 'Publications', icon: BookOpen, path: '/admin/publications' },
                 { name: 'Opportunities', icon: Briefcase, path: '/admin/opportunities' },
-                { name: 'Content', icon: FileText, path: '/admin/content' },
-                { name: 'Documents', icon: Files, path: '/admin/documents' },
-                { name: 'Approvals', icon: CheckSquare, path: '/admin/approvals' },
-                { name: 'Reports', icon: BarChart, path: '/admin/reports' },
-                { name: 'System', icon: Settings, path: '/admin/system' },
+                { name: 'Document Vault', icon: Files, path: '/admin/documents' },
+                { name: 'Website Pages', icon: FileText, path: '/admin/content' },
+                { name: 'Analytics & Reports', icon: BarChart, path: '/admin/reports' },
+                { name: 'System Settings', icon: Settings, path: '/admin/system' },
+            ];
+        } else if (role === 'Reviewer') {
+            return [
+                { name: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+                { name: 'Research Projects', icon: FlaskConical, path: '/admin/research' },
+                { name: 'Approvals Queue', icon: CheckSquare, path: '/admin/approvals' },
+                { name: 'Document Vault', icon: Files, path: '/admin/documents' },
+                { name: 'Profile Settings', icon: Settings, path: '/admin/settings' },
+            ];
+        } else if (role === 'Finance Officer') {
+            return [
+                { name: 'Dashboard', icon: LayoutDashboard, path: '/admin' },
+                { name: 'Research Projects', icon: FlaskConical, path: '/admin/research' },
+                { name: 'Grants Approvals', icon: CheckSquare, path: '/admin/approvals' },
+                { name: 'Document Vault', icon: Files, path: '/admin/documents' },
+                { name: 'Financial Reports', icon: BarChart, path: '/admin/reports' },
+                { name: 'Profile Settings', icon: Settings, path: '/admin/settings' },
             ];
         } else if (role === 'Professor') {
             return [
@@ -51,7 +69,7 @@ const DashboardLayout = () => {
                 { name: 'My Dashboard', icon: LayoutDashboard, path: '/student' },
                 { name: 'Opportunities', icon: Briefcase, path: '/student/opportunities' },
                 { name: 'My Applications', icon: FileText, path: '/student/applications' },
-                { name: 'My Profile', icon: Settings, path: '/student/profile' },
+                { name: 'Scholar Profile', icon: Settings, path: '/student/profile' },
             ];
         }
         return [];
@@ -77,16 +95,25 @@ const DashboardLayout = () => {
 
             {/* Sidebar */}
             <div className={`fixed inset-y-0 left-0 z-30 w-64 bg-nyu-deep text-white transform transition-transform duration-300 ease-in-out lg:translate-x-0 lg:static lg:inset-auto ${sidebarOpen ? 'translate-x-0' : '-translate-x-full'}`}>
-                <div className="flex items-center justify-center h-20 border-b border-white/10">
-                    <h1 className="text-xl font-heading font-bold text-center px-4 leading-tight">
-                        Research Office
-                    </h1>
+                <div className="flex items-center justify-between h-20 px-6 border-b border-white/10">
+                    <div className="flex items-center space-x-2">
+                        <div className="w-8 h-8 rounded bg-nyu-primary flex items-center justify-center font-bold text-white text-sm shadow">
+                            NYU
+                        </div>
+                        <h1 className="text-base font-heading font-bold text-white leading-tight">
+                            Research Office
+                        </h1>
+                    </div>
+                    <button 
+                        onClick={() => setSidebarOpen(false)}
+                        className="text-gray-400 hover:text-white lg:hidden"
+                    >
+                        <X className="w-5 h-5" />
+                    </button>
                 </div>
                 
-                <nav className="mt-6 px-4 space-y-1 overflow-y-auto h-[calc(100vh-5rem)] pb-20">
+                <nav className="mt-6 px-3 space-y-1 overflow-y-auto h-[calc(100vh-6rem)] pb-20">
                     {menuItems.map((item) => {
-                        // Check if current path matches item path exactly, OR starts with item path + '/'
-                        // but prevent Dashboard ('/admin') from lighting up for '/admin/research'
                         const isActive = item.path === '/admin' || item.path === '/professor' || item.path === '/student' 
                             ? location.pathname === item.path
                             : location.pathname === item.path || location.pathname.startsWith(item.path + '/');
@@ -96,24 +123,24 @@ const DashboardLayout = () => {
                                 key={item.name}
                                 to={item.path}
                                 onClick={() => setSidebarOpen(false)}
-                                className={`flex items-center px-4 py-3 rounded-lg transition-colors group ${
+                                className={`flex items-center px-3.5 py-2.5 rounded-lg transition-colors group ${
                                     isActive
-                                        ? 'bg-nyu-primary text-white shadow-lg' 
+                                        ? 'bg-nyu-primary text-white shadow' 
                                         : 'text-nyu-veryLight hover:bg-white/10 hover:text-white'
                                 }`}
                             >
-                                <item.icon className={`w-5 h-5 mr-3 ${isActive ? 'text-white' : 'group-hover:text-white'}`} />
-                                <span className="font-medium text-sm">{item.name}</span>
+                                <item.icon className={`w-4 h-4 mr-3 flex-shrink-0 ${isActive ? 'text-white' : 'text-nyu-light group-hover:text-white'}`} />
+                                <span className="font-medium text-xs tracking-wide">{item.name}</span>
                             </Link>
                         );
                     })}
                     
                     <button 
                         onClick={handleLogout}
-                        className="flex items-center w-full px-4 py-3 mt-8 text-nyu-light hover:bg-white/10 hover:text-white rounded-lg transition-colors"
+                        className="flex items-center w-full px-3.5 py-2.5 mt-8 text-red-300 hover:bg-red-500/20 hover:text-red-200 rounded-lg transition-colors text-xs font-semibold"
                     >
-                        <LogOut className="w-5 h-5 mr-3" />
-                        <span className="font-medium text-sm">Logout</span>
+                        <LogOut className="w-4 h-4 mr-3" />
+                        <span>Sign Out</span>
                     </button>
                 </nav>
             </div>
@@ -129,27 +156,36 @@ const DashboardLayout = () => {
                         >
                             <Menu className="w-6 h-6" />
                         </button>
-                        <h2 className="text-2xl font-heading text-gray-800">Admin Portal</h2>
+                        <h2 className="text-xl font-heading font-bold text-gray-800">
+                            {role === 'Super Admin' || role === 'Office Admin' ? 'Research Administration' :
+                             role === 'Professor' ? 'Faculty Portal' :
+                             role === 'Student' ? 'Student Research Portal' :
+                             `${role} Portal`}
+                        </h2>
                     </div>
                     
                     <div className="flex items-center space-x-4">
-                        <button className="text-gray-500 hover:text-nyu-primary transition-colors">
-                            <Bell className="w-6 h-6" />
-                        </button>
+                        <Link 
+                            to="/" 
+                            target="_blank"
+                            className="text-xs text-gray-500 hover:text-nyu-primary font-medium hidden sm:inline-block px-3 py-1.5 border rounded"
+                        >
+                            Public Website ↗
+                        </Link>
                         <div className="flex items-center gap-3 border-l pl-4 border-gray-200">
-                            <div className="w-10 h-10 rounded-full bg-nyu-primary flex items-center justify-center text-white font-bold">
+                            <div className="w-9 h-9 rounded-full bg-nyu-primary flex items-center justify-center text-white font-bold text-sm shadow">
                                 {user?.name?.charAt(0) || 'U'}
                             </div>
-                            <div className="hidden md:block text-sm">
-                                <p className="font-bold text-gray-900">{user?.name || 'User'}</p>
-                                <p className="text-gray-500 text-xs">{role}</p>
+                            <div className="hidden md:block text-left text-xs">
+                                <p className="font-bold text-gray-900 leading-tight">{user?.name || 'User'}</p>
+                                <span className="inline-block text-nyu-primary font-semibold text-[10px] uppercase tracking-wider">{role}</span>
                             </div>
                         </div>
                     </div>
                 </header>
 
                 {/* Main scrollable area */}
-                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-light p-6">
+                <main className="flex-1 overflow-x-hidden overflow-y-auto bg-gray-50 p-6">
                     <Outlet />
                 </main>
             </div>
