@@ -14,7 +14,7 @@ This guide covers complete, production-grade installation, security hardening, q
 - **Storage:** NVMe/SSD with minimum 40 GB free space (scales with document repository)
 
 ### Software Stack
-- **PHP:** `8.2` or `8.3` / `8.4` (CLI, FPM)
+- **PHP:** `8.2`, `8.3`, or `8.4` (CLI, FPM)
   - Required PHP Extensions: `bcmath`, `ctype`, `curl`, `dom`, `fileinfo`, `filter`, `gd`, `hash`, `intl`, `json`, `mbstring`, `openssl`, `pcre`, `pdo`, `pdo_mysql` (or `pdo_pgsql`), `session`, `tokenizer`, `xml`, `zip`
 - **Node.js:** `v20.x` or `v22.x` (LTS) & `npm 10+`
 - **Web Server:** Nginx `1.22+` (with HTTP/2, TLS 1.3)
@@ -70,7 +70,7 @@ cd /var/www/nyu-research-office/backend
 composer install --no-dev --optimize-autoloader
 
 # Set up production environment configuration
-cp .env.example .env
+cp .env.production.example .env
 
 # Generate secure application key
 php artisan key:generate
@@ -87,12 +87,13 @@ APP_URL=https://research.nyu.edu
 DB_CONNECTION=mysql
 DB_HOST=127.0.0.1
 DB_PORT=3306
-DB_DATABASE=nyu_research_office
-DB_USERNAME=nyu_db_user
-DB_PASSWORD=YourStrongDatabasePasswordHere
+DB_DATABASE=nyu_research_office_prod
+DB_USERNAME=nyu_research_app
+DB_PASSWORD=YourStrongGeneratedDatabasePassword
 
 SESSION_DRIVER=database
 SESSION_SECURE_COOKIE=true
+SESSION_ENCRYPT=true
 QUEUE_CONNECTION=database
 CACHE_STORE=database
 
@@ -101,19 +102,35 @@ CORS_ALLOWED_ORIGINS=https://research.nyu.edu
 SANCTUM_STATEFUL_DOMAINS=research.nyu.edu
 ```
 
-### 3.3 Database Migration & First Administrator Bootstrap
+### 3.3 Database Migration & Reference Seeding
 ```bash
 # Run database migrations safely (never drops existing data)
 php artisan migrate --force
 
-# Bootstrap the initial Super Administrator (automatically permanently locks after execution)
-php artisan research:bootstrap-admin \
-  --email="admin@nyu.edu" \
-  --name="Institutional Super Admin" \
-  --password="YourStrongInitialAdminPassword!"
+# Seed institutional reference structures only (roles, permissions, departments, faculties)
+# This creates ZERO user accounts and ZERO passwords.
+php artisan db:seed --class=InstitutionalReferenceSeeder --force
 ```
 
-### 3.4 File Permissions Hardening
+> [!IMPORTANT]
+> **Do not run `DevelopmentDemoSeeder` in production.** The system is protected against this and will abort with a security exception if attempted in a production environment.
+
+### 3.4 Initial Administrator Provisioning (Hardened CLI)
+Bootstrap your primary Super Administrator securely via the console:
+```bash
+php artisan research:bootstrap-admin \
+  --email="lead.administrator@nyu.edu" \
+  --name="Lead Research Administrator" \
+  --password="REPLACE_WITH_STRONG_PASSWORD_MIN_12_CHARS_MIXED_CASE_NUMBERS_SYMBOLS!"
+```
+
+**Security Safeguards:**
+- Refuses to overwrite or hijack any existing user account.
+- Rejects weak passwords (requires min 12 chars, letters, mixed case, numbers, symbols).
+- Automatically and permanently locks subsequent bootstrap attempts.
+- Never prints or logs the administrator password.
+
+### 3.5 File Permissions Hardening
 ```bash
 cd /var/www/nyu-research-office/backend
 
@@ -127,14 +144,12 @@ sudo chown -R www-data:www-data storage bootstrap/cache
 sudo chmod -R 775 storage bootstrap/cache
 ```
 
-### 3.5 Frontend Production Build
+### 3.6 Frontend Production Build
 ```bash
 cd /var/www/nyu-research-office/frontend
 
 # Configure production environment variables
-cat << 'EOF' > .env.production
-VITE_API_URL=https://research.nyu.edu/api
-EOF
+cp .env.production.example .env.production
 
 # Install node dependencies & compile production bundle
 npm ci
@@ -276,7 +291,7 @@ mkdir -p "$BACKUP_DIR"
 
 # MySQL Backup (with single-transaction consistency)
 mysqldump --single-transaction --quick --routines --triggers \
-  -u nyu_db_user -p"YourStrongDatabasePasswordHere" nyu_research_office \
+  -u nyu_research_app -p"YourStrongGeneratedDatabasePassword" nyu_research_office_prod \
   | gzip > "$BACKUP_DIR/db_backup_$DATE.sql.gz"
 
 # Backup secure documents vault
@@ -295,7 +310,7 @@ echo "0 2 * * * /usr/local/bin/backup-research-db.sh >> /var/log/nyu_backup.log 
 ### 7.2 Database Restore Procedure
 ```bash
 # Decompress and restore database
-gunzip < /var/backups/nyu-research-office/db_backup_20261020_020000.sql.gz | mysql -u nyu_db_user -p nyu_research_office
+gunzip < /var/backups/nyu-research-office/db_backup_20261020_020000.sql.gz | mysql -u nyu_research_app -p nyu_research_office_prod
 
 # Restore secure file vault
 tar -xzf /var/backups/nyu-research-office/documents_vault_20261020_020000.tar.gz -C /var/www/nyu-research-office/backend/storage/app/private
@@ -303,9 +318,24 @@ tar -xzf /var/backups/nyu-research-office/documents_vault_20261020_020000.tar.gz
 
 ---
 
-## 8. Verification & Health Monitoring
+## 8. Password Rotation for Pre-existing Staging Deployments
 
-1. **Verify Backend Status:**
+If any previous staging environment was seeded with development demo accounts:
+1. Revoke all active API tokens:
+   ```bash
+   php artisan tinker --execute="DB::table('personal_access_tokens')->truncate();"
+   ```
+2. Invalidate passwords or remove test accounts:
+   ```bash
+   php artisan tinker --execute="App\Models\User::whereIn('email', ['admin@nyu.edu', 'office@nyu.edu', 'professor@nyu.edu'])->delete();"
+   ```
+3. Provision your official administrators via `php artisan research:bootstrap-admin`.
+
+---
+
+## 9. Verification & Health Monitoring
+
+1. **Verify Backend Status & Test Suite:**
    ```bash
    cd /var/www/nyu-research-office/backend
    php artisan route:list --path=api
@@ -321,4 +351,4 @@ tar -xzf /var/backups/nyu-research-office/documents_vault_20261020_020000.tar.gz
    sudo systemctl status php8.4-fpm
    ```
 4. **Audit Logs:**
-   Access the `audit_logs` table via database or API to review all administrator actions, project approvals, authentication attempts, and file access requests.
+   Query the `audit_logs` table via database or API to review all administrator actions, project approvals, authentication attempts, and file access requests.

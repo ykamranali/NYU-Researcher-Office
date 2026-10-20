@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import axios from '../api/axios';
-import { Lock, Mail, Eye, EyeOff, ShieldCheck, UserCheck } from 'lucide-react';
+import { Lock, Mail, Eye, EyeOff, ShieldCheck } from 'lucide-react';
 
 const Login = () => {
     const [isRegister, setIsRegister] = useState(false);
@@ -15,21 +15,6 @@ const Login = () => {
     const [successMessage, setSuccessMessage] = useState('');
     const [loading, setLoading] = useState(false);
     const navigate = useNavigate();
-
-    const quickLogins = [
-        { label: 'Super Admin', email: 'admin@nyu.edu', pass: 'AdminSecret2026!', badge: 'bg-purple-100 text-purple-800' },
-        { label: 'Office Admin', email: 'office@nyu.edu', pass: 'OfficeAdmin2026!', badge: 'bg-blue-100 text-blue-800' },
-        { label: 'Professor', email: 'professor@nyu.edu', pass: 'Professor2026!', badge: 'bg-emerald-100 text-emerald-800' },
-        { label: 'Reviewer', email: 'reviewer@nyu.edu', pass: 'Reviewer2026!', badge: 'bg-indigo-100 text-indigo-800' },
-        { label: 'Finance', email: 'finance@nyu.edu', pass: 'Finance2026!', badge: 'bg-amber-100 text-amber-800' },
-        { label: 'Student', email: 'student@nyu.edu', pass: 'Student2026!', badge: 'bg-gray-100 text-gray-800' },
-    ];
-
-    const handleQuickLogin = (quickEmail: string, quickPass: string) => {
-        setEmail(quickEmail);
-        setPassword(quickPass);
-        setError('');
-    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -107,27 +92,6 @@ const Login = () => {
                 {successMessage && (
                     <div className="mb-4 bg-green-50 border-l-4 border-green-500 p-3 text-green-700 text-sm rounded">
                         {successMessage}
-                    </div>
-                )}
-
-                {/* Quick Demo Credentials Bar */}
-                {!isRegister && (
-                    <div className="mb-6 bg-gray-50 p-3 rounded-lg border border-gray-200">
-                        <p className="text-xs font-semibold text-gray-500 uppercase tracking-wider mb-2 flex items-center">
-                            <UserCheck className="w-3.5 h-3.5 mr-1 text-nyu-primary" /> Quick Demo Role Logins:
-                        </p>
-                        <div className="grid grid-cols-3 gap-1.5 text-xs">
-                            {quickLogins.map((ql) => (
-                                <button
-                                    key={ql.label}
-                                    type="button"
-                                    onClick={() => handleQuickLogin(ql.email, ql.pass)}
-                                    className={`py-1 px-2 rounded font-medium border text-center hover:opacity-80 transition-opacity ${ql.badge}`}
-                                >
-                                    {ql.label}
-                                </button>
-                            ))}
-                        </div>
                     </div>
                 )}
 

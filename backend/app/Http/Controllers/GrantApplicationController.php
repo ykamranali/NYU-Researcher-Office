@@ -17,7 +17,7 @@ class GrantApplicationController extends Controller
         $user = $request->user();
         $query = GrantApplication::with(['applicant:id,name,email', 'researchProject:id,title,project_code', 'financeOfficer:id,name']);
 
-        // Scope non-admin/finance
+        // Non-admin/finance users can only view their own grant applications
         if (!$user->hasAnyRole(['Super Admin', 'Office Admin', 'Finance Officer'])) {
             $query->where('applicant_id', $user->id);
         }
@@ -35,6 +35,13 @@ class GrantApplicationController extends Controller
     public function store(Request $request)
     {
         $user = $request->user();
+
+        // Students cannot submit grant proposals directly
+        if (!$user->hasAnyRole(['Super Admin', 'Office Admin', 'Professor'])) {
+            return response()->json([
+                'message' => 'Forbidden: Only faculty researchers or administrators may submit institutional grant proposals.'
+            ], 403);
+        }
 
         $validated = $request->validate([
             'title' => 'required|string|max:255',
@@ -90,7 +97,7 @@ class GrantApplicationController extends Controller
         $user = $request->user();
 
         if (!$user->hasAnyRole(['Super Admin', 'Office Admin', 'Finance Officer']) && $grant->applicant_id !== $user->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
+            return response()->json(['message' => 'Forbidden: You do not have permission to view this grant application.'], 403);
         }
 
         return response()->json($grant);
@@ -108,25 +115,34 @@ class GrantApplicationController extends Controller
 
         $grant = GrantApplication::findOrFail($id);
 
+        // Governance: prevent self-approval of grants
+        if ($grant->applicant_id === $user->id) {
+            return response()->json([
+                'message' => 'Governance Rule: You cannot approve or award your own grant application.'
+            ], 403);
+        }
+
         $validated = $request->validate([
             'status' => 'required|string|in:Awarded,Rejected,Under Review,Closed',
             'awarded_amount' => 'nullable|numeric|min:0',
             'financial_notes' => 'nullable|string',
         ]);
 
-        $grant->update([
-            'status' => $validated['status'],
-            'awarded_amount' => $validated['awarded_amount'] ?? $grant->requested_amount,
-            'award_date' => $validated['status'] === 'Awarded' ? now() : $grant->award_date,
-            'financial_notes' => $validated['financial_notes'] ?? $grant->financial_notes,
-            'finance_officer_id' => $user->id,
-        ]);
+        DB::transaction(function () use ($grant, $validated, $user) {
+            $grant->update([
+                'status' => $validated['status'],
+                'awarded_amount' => $validated['awarded_amount'] ?? $grant->requested_amount,
+                'award_date' => $validated['status'] === 'Awarded' ? now() : $grant->award_date,
+                'financial_notes' => $validated['financial_notes'] ?? $grant->financial_notes,
+                'finance_officer_id' => $user->id,
+            ]);
 
-        AuditLog::log('grant_award_decision', 'GrantApplication', $grant->id, [
-            'grant_code' => $grant->grant_code,
-            'status' => $validated['status'],
-            'awarded_amount' => $grant->awarded_amount,
-        ], $user->id);
+            AuditLog::log('grant_award_decision', 'GrantApplication', $grant->id, [
+                'grant_code' => $grant->grant_code,
+                'status' => $validated['status'],
+                'awarded_amount' => $grant->awarded_amount,
+            ], $user->id);
+        });
 
         return response()->json([
             'message' => "Grant decision '{$validated['status']}' recorded successfully.",
@@ -143,7 +159,13 @@ class GrantApplicationController extends Controller
         $grant = GrantApplication::findOrFail($id);
 
         if (!$user->hasAnyRole(['Super Admin', 'Office Admin', 'Finance Officer']) && $grant->applicant_id !== $user->id) {
-            return response()->json(['message' => 'Forbidden'], 403);
+            return response()->json(['message' => 'Forbidden: You do not have permission to manage this grant.'], 403);
+        }
+
+        if ($grant->status !== 'Awarded') {
+            return response()->json([
+                'message' => 'Cannot record expenditure against a grant that is not in Awarded status.'
+            ], 422);
         }
 
         $validated = $request->validate([

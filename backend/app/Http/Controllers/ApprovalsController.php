@@ -19,7 +19,7 @@ class ApprovalsController extends Controller
     {
         $user = $request->user();
         if (!$user->hasAnyRole(['Super Admin', 'Office Admin', 'Reviewer', 'Finance Officer'])) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Unauthorized: Insufficient approval permissions.'], 403);
         }
 
         $items = collect();
@@ -41,29 +41,31 @@ class ApprovalsController extends Controller
                 'date' => $p->updated_at->format('M j, Y'),
                 'status' => 'Pending',
                 'current_stage' => $p->status,
-                'can_approve' => $user->id !== $p->user_id, // Governance: cannot approve own
+                'can_approve' => ($user->id !== $p->user_id) && $user->hasAnyRole(['Super Admin', 'Office Admin']),
             ]);
         }
 
         // 2. Ethics Protocols pending review
-        $ethics = EthicsApplication::with('user:id,name,email')
-            ->whereIn('status', ['Submitted', 'Under Review'])
-            ->get();
+        if ($user->hasAnyRole(['Super Admin', 'Office Admin', 'Reviewer'])) {
+            $ethics = EthicsApplication::with('user:id,name,email')
+                ->whereIn('status', ['Submitted', 'Under Review'])
+                ->get();
 
-        foreach ($ethics as $e) {
-            $items->push([
-                'id' => 'IRB-' . $e->id,
-                'raw_id' => $e->id,
-                'entity_type' => 'EthicsApplication',
-                'type' => 'Ethics / IRB Review',
-                'title' => $e->title,
-                'applicant' => $e->user?->name ?? 'Unknown',
-                'applicant_id' => $e->user_id,
-                'date' => $e->created_at->format('M j, Y'),
-                'status' => 'Pending',
-                'current_stage' => $e->status,
-                'can_approve' => $user->id !== $e->user_id,
-            ]);
+            foreach ($ethics as $e) {
+                $items->push([
+                    'id' => 'IRB-' . $e->id,
+                    'raw_id' => $e->id,
+                    'entity_type' => 'EthicsApplication',
+                    'type' => 'Ethics / IRB Review',
+                    'title' => $e->title,
+                    'applicant' => $e->user?->name ?? 'Unknown',
+                    'applicant_id' => $e->user_id,
+                    'date' => $e->created_at->format('M j, Y'),
+                    'status' => 'Pending',
+                    'current_stage' => $e->status,
+                    'can_approve' => $user->id !== $e->user_id,
+                ]);
+            }
         }
 
         // 3. Grants pending review
@@ -99,7 +101,7 @@ class ApprovalsController extends Controller
     {
         $user = $request->user();
         if (!$user->hasAnyRole(['Super Admin', 'Office Admin', 'Reviewer', 'Finance Officer'])) {
-            return response()->json(['message' => 'Unauthorized'], 403);
+            return response()->json(['message' => 'Unauthorized: Insufficient approval permissions.'], 403);
         }
 
         $validated = $request->validate([
@@ -112,9 +114,12 @@ class ApprovalsController extends Controller
 
         switch ($validated['entity_type']) {
             case 'ResearchProject':
+                if (!$user->hasAnyRole(['Super Admin', 'Office Admin'])) {
+                    return response()->json(['message' => 'Unauthorized: Final project approval requires Research Office Administrator.'], 403);
+                }
                 $project = ResearchProject::findOrFail($validated['raw_id']);
                 if ($project->user_id === $user->id) {
-                    return response()->json(['message' => 'Governance Rule: You cannot approve your own submission.'], 403);
+                    return response()->json(['message' => 'Governance Rule: You cannot approve your own project submission.'], 403);
                 }
                 $project->update(['status' => 'Approved', 'visibility' => 'Public']);
                 ProjectReview::create([
@@ -129,6 +134,9 @@ class ApprovalsController extends Controller
                 break;
 
             case 'EthicsApplication':
+                if (!$user->hasAnyRole(['Super Admin', 'Office Admin', 'Reviewer'])) {
+                    return response()->json(['message' => 'Unauthorized: Ethics approval requires designated IRB reviewer or administrator.'], 403);
+                }
                 $ethics = EthicsApplication::findOrFail($validated['raw_id']);
                 if ($ethics->user_id === $user->id) {
                     return response()->json(['message' => 'Governance Rule: You cannot approve your own ethics protocol.'], 403);
@@ -147,6 +155,9 @@ class ApprovalsController extends Controller
                 break;
 
             case 'GrantApplication':
+                if (!$user->hasAnyRole(['Super Admin', 'Office Admin', 'Finance Officer'])) {
+                    return response()->json(['message' => 'Unauthorized: Grant approval requires Finance Officer or Administrator.'], 403);
+                }
                 $grant = GrantApplication::findOrFail($validated['raw_id']);
                 if ($grant->applicant_id === $user->id) {
                     return response()->json(['message' => 'Governance Rule: You cannot approve your own grant application.'], 403);
@@ -203,6 +214,9 @@ class ApprovalsController extends Controller
 
             case 'EthicsApplication':
                 $ethics = EthicsApplication::findOrFail($validated['raw_id']);
+                if ($ethics->user_id === $user->id) {
+                    return response()->json(['message' => 'Governance Rule: Self-decision forbidden.'], 403);
+                }
                 $ethics->update([
                     'status' => 'Rejected',
                     'decision_date' => now(),
@@ -214,6 +228,9 @@ class ApprovalsController extends Controller
 
             case 'GrantApplication':
                 $grant = GrantApplication::findOrFail($validated['raw_id']);
+                if ($grant->applicant_id === $user->id) {
+                    return response()->json(['message' => 'Governance Rule: Self-decision forbidden.'], 403);
+                }
                 $grant->update([
                     'status' => 'Rejected',
                     'financial_notes' => $validated['comments'],

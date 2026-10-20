@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers;
 
+use App\Models\AuditLog;
 use App\Models\Page;
 use App\Models\PageBlock;
 use Illuminate\Http\Request;
@@ -16,6 +17,11 @@ class PageController extends Controller
 
     public function store(Request $request)
     {
+        $user = $request->user();
+        if (!$user->hasAnyRole(['Super Admin', 'Office Admin'])) {
+            return response()->json(['message' => 'Unauthorized: Only Research Administrators can manage CMS pages.'], 403);
+        }
+
         $validated = $request->validate([
             'title' => 'required|string|max:255',
             'status' => 'required|string|in:Draft,Published,Scheduled,Archived',
@@ -39,6 +45,8 @@ class PageController extends Controller
             }
         }
 
+        AuditLog::log('page_created', 'Page', $page->id, ['title' => $page->title], $user->id);
+
         return response()->json([
             'message' => 'Page created successfully',
             'page' => $page->load('blocks')
@@ -52,6 +60,11 @@ class PageController extends Controller
 
     public function update(Request $request, $id)
     {
+        $user = $request->user();
+        if (!$user->hasAnyRole(['Super Admin', 'Office Admin'])) {
+            return response()->json(['message' => 'Unauthorized: Only Research Administrators can manage CMS pages.'], 403);
+        }
+
         $page = Page::findOrFail($id);
         
         $validated = $request->validate([
@@ -78,16 +91,25 @@ class PageController extends Controller
             }
         }
 
+        AuditLog::log('page_updated', 'Page', $page->id, [], $user->id);
+
         return response()->json([
             'message' => 'Page updated successfully',
             'page' => $page->load('blocks')
         ]);
     }
 
-    public function destroy($id)
+    public function destroy(Request $request, $id)
     {
+        $user = $request->user();
+        if (!$user->hasAnyRole(['Super Admin', 'Office Admin'])) {
+            return response()->json(['message' => 'Unauthorized: Only Research Administrators can manage CMS pages.'], 403);
+        }
+
         $page = Page::findOrFail($id);
         $page->delete();
+
+        AuditLog::log('page_deleted', 'Page', $id, [], $user->id);
 
         return response()->json(['message' => 'Page deleted successfully']);
     }
